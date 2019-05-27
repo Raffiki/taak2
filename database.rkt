@@ -19,6 +19,7 @@
          create-table drop-table!
          select-from/eq
          insert-into-table! create-index!
+         select*-from/inner-join
          delete-where! print-table print)
  (import (prefix (a-d disk disk) disk:)
          (a-d file constants)
@@ -28,11 +29,13 @@
          (prefix (Taak2 table) tbl:)
          (prefix (Taak2 schema) scma:)
          (prefix (a-d db index b-tree b-tree) btree:)
+         (prefix (a-d dictionary unordered linear-rehashing) dict:)
          (rnrs base)
          (rnrs control)
          (rnrs lists)
          (only (rnrs io simple) display newline))
- 
+
+ (define *m* 4)
  (define *num* 0)
  (define (gennum)
    (let ((res *num*))
@@ -174,6 +177,41 @@
                                (tbl:current! tble (cdr (btree:peek indx)))
                                (set! rslt (cons (tbl:peek tble) rslt)))))
    rslt)
+
+ (define (select*-from/inner-join db t1 a1 t2 a2)
+   (define scma (tbl:schema t1))
+   (define type (scma:type scma a1))
+   (define eqls (vector-ref equals type))
+   (define (inner dict)
+     (let
+         ((has-next-t2 (tbl:for-each-of-n-next-nodes t2 1
+                                                     (lambda (tple rcid)
+                                                       (let ((value (dict:find dict (list-ref tple a2))))
+                                                         (if value
+                                                             (begin (display tple) (display value) (newline))))))))
+       (if has-next-t2 (inner dict))))
+   (define (outer)
+     (let*
+         ((dict (dict:new eqls (* (scma:capacity (tbl:schema t1)) *m*) (lambda (x) x)))
+          (has-next-t1 (tbl:for-each-of-n-next-nodes t1 (- *m* 1)
+                                                     (lambda (tple rcid)
+                                                       (display "insert tuple in dict: ")(display tple)(display (list-ref tple a1))(newline) 
+                                                       (dict:insert! dict (list-ref tple a1) tple)))))
+       (newline)
+       
+       (display "dict: ") (display (dict:print dict))
+       (newline)
+         
+       (inner dict)
+       (if has-next-t1 (outer) 'done)))
+   (tbl:set-current-to-first! t1)
+   (tbl:set-current-to-first! t2)
+   (display "start")
+   (outer)
+   )
+       
+
+
 
   (define (for-all-identical-keys indx eqls valu proc)
    (let loop

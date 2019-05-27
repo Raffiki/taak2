@@ -74,7 +74,8 @@
      ((acc '())
       (cnt n)
       (bffr (buffer tble)))
-     (cond ((= 0 cnt) (reverse acc))
+     (cond ((null? bffr) acc)
+           ((= 0 cnt) (reverse acc))
            ((fs:null-block? (node:next bffr)) (reverse acc))
            (else
             (let ((next (node:read scma (node:next bffr))))
@@ -83,28 +84,33 @@
  (define  (for-each-of-n-next-nodes tble n proc)
     (let loop
       ((bffrs (read-n-nodes tble n)))
-      (if (> (length bffrs) 0)
       (let
           ((tuple (peek tble))
            (curr (slot tble)))
-        (unless (eq? tuple no-current) ; no-current is gedefinieerd in de (a-d file constants) library
+        (display (length bffrs)) (display " : lengte buffer ")  (newline)
+        
+        (if (eq? tuple no-current) ; no-current is gedefinieerd in de (a-d file constants) library
+              (not (or (null? (buffer tble)) (fs:null-block? (node:next (buffer tble)))))
+            (begin 
           (proc tuple (current tble)) ; Voer de procedure uit met het tupel en haar record ID als parameters
           (let ((indx (find-occupied-slot (buffer tble) curr)))
             (cond ((not (= indx -1))
                    (slot!   tble indx)
                    (loop bffrs))
-                  ((not (null? (car bffrs)))
+                  ((not (or (null? bffrs) (null? (car bffrs))))
                    (let* ((next (car bffrs))
                           (indx  (find-occupied-slot next -1)))
                      (buffer! tble next)
                      (slot!   tble indx)
                      (loop (cdr bffrs))))
-                  (else
+                  ((fs:null-block? (node:next (buffer tble)))
                    (buffer! tble ())
                    (slot!   tble -1)
-                   no-current)))
+                   (display "done")
+                   #f)
+                  (else #t))
 
-          )))))
+          ))))))
  
  (define (nr-of-nodes tble)
    (display full-offset) (newline)
