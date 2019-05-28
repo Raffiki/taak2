@@ -14,7 +14,7 @@
 
 (library
  (table)
- (export new open close! current current! header nr-of-nodes nr-blocks
+ (export new open close! current current! header  nr-of-datanodes
          drop! insert! delete! peek print table? for-each-of-n-next-nodes
          set-current-to-first! set-current-to-next!
          schema name disk)
@@ -68,7 +68,7 @@
                 (slot!   tble -1)
                 no-current)))))
 
-  (define (read-n-nodes tble n)
+ (define (read-n-nodes tble n)
    (define scma (schema tble))
    (let loop
      ((acc '())
@@ -81,44 +81,56 @@
             (let ((next (node:read scma (node:next bffr))))
               (loop (cons next acc) (- cnt 1) next))))))
 
- (define  (for-each-of-n-next-nodes tble n proc)
-    (let loop
-      ((bffrs (read-n-nodes tble n)))
-      (let
-          ((tuple (peek tble))
-           (curr (slot tble)))
-       ; (display (length bffrs)) (display " : lengte buffer ")  (newline)
-        
-        (if (eq? tuple no-current) ; no-current is gedefinieerd in de (a-d file constants) library
-              (not (or (null? (buffer tble)) (fs:null-block? (node:next (buffer tble)))))
-            (begin 
-          (proc tuple (current tble)) ; Voer de procedure uit met het tupel en haar record ID als parameters
-          (let ((indx (find-occupied-slot (buffer tble) curr)))
-            (cond ((not (= indx -1))
-                   (slot!   tble indx)
-                   (loop bffrs))
-                  ((not (or (null? bffrs) (null? (car bffrs))))
-                   (let* ((next (car bffrs))
-                          (indx  (find-occupied-slot next -1)))
-                     (buffer! tble next)
-                     (slot!   tble indx)
-                     (loop (cdr bffrs))))
-                  ((fs:null-block? (node:next (buffer tble)))
-                   (buffer! tble ())
-                   (slot!   tble -1)
-                   ;(display "done")
-                   #f)
-                  (else (set-current-to-next! tble) #t))
+ (define (nr-of-datanodes tble)        ; hulpfunctie tijdens ontwikkelen die het aantal data-nodes van de tabel telt
+   (set-current-to-first! tble)  ; deze functie werd enkel gebruikt tijdens ontwikkeling. deze functie doet een blocktransfer voor elke node 
+   (let loop
+     ((cnt 1)
+      (bffr (buffer tble)))
+     (if (fs:null-block? (node:next bffr))
+         cnt
+         (loop (+ 1 cnt) (node:read (schema tble) (node:next bffr))))))
 
-          ))))))
- 
- (define (nr-of-nodes tble)
-   (display full-offset) (newline)
-   (display last-offset) (newline)
-   (display part-offset) (newline)
-   (display (full tble)) (newline)
-   
-   (part tble))
+
+ ; voer een procedure uit op elk van de tupels van de volgende (tov. de current) n datanodes. 
+ ; return #t als er nadien nog een datablok is, anders #f
+ (define  (for-each-of-n-next-nodes tble n proc) 
+   (let loop                                    
+     ((bffrs (read-n-nodes tble n))) ; haal de volgende n datanodes op in het centraal geheugen
+     (let
+         ((tuple (peek tble))
+          (curr (slot tble)))        
+       (if (eq? tuple no-current) ; no-current is gedefinieerd in de (a-d file constants) library
+           (not (or (null? (buffer tble)) (fs:null-block? (node:next (buffer tble)))))
+           (begin 
+             (proc tuple (current tble)) ; Voer de procedure uit met het tupel en haar record ID als parameters
+             (let ((indx (find-occupied-slot (buffer tble) curr)))
+               (cond ((not (= indx -1))
+                      (slot!   tble indx)
+                      (loop bffrs))
+                     ((not (or (null? bffrs) (null? (car bffrs)))) ; de huidige buffer bevat geen tuples meer, maar er is nog een buffer opgehaald in het geheugen
+                      (let* ((next (car bffrs))
+                             (indx  (find-occupied-slot next -1)))
+                        (buffer! tble next) ; zet de volgende buffer 
+                        (slot!   tble indx)
+                        (loop (cdr bffrs)))) ; en loop
+                     ; de huidige buffer bevat geen tuples meer,
+                     ; er zijn geen buffers meer in het geheugen
+                     ; en de tabel heeft geen volgend datablok:
+                     ; return #f
+                     ((fs:null-block? (node:next (buffer tble)))
+                      (buffer! tble ())
+                      (slot!   tble -1)
+                      #f)
+                     ; de huidige buffer bevat geen tuples meer,
+                     ; er zijn geen buffers meer in het geheugen
+                     ; maar de tabel heeft nog een volgend datablok:
+                     ; schuif de current op naar die tabel
+                     ; return #t
+                     (else
+                      (set-current-to-next! tble) #t))
+
+               ))))))
+
  
  (define (full tble)
    (define hder (header tble))
@@ -252,8 +264,8 @@
    (node:clear-slot! node (rcid:slot rcid))
    (cond ((node:all-free? node)
           (if was-full?
-            (extract-node! tble full full! node)
-            (extract-node! tble part part! node))
+              (extract-node! tble full full! node)
+              (extract-node! tble part part! node))
           (node:delete! node))
          (else
           (when was-full?
@@ -337,17 +349,17 @@
    (define scma (schema tble))
    (if (and (fs:null-block? (full tble))
             (fs:null-block? (part tble)))
-     no-current
-     (let* ((fptr (if (fs:null-block? (full tble))
-                    (part tble)
-                    (full tble)))
-            (bffr (node:read scma fptr))
-            (curr (find-occupied-slot bffr -1)))
-       (buffer! tble bffr)
-       (slot!   tble curr)
-       done)))
+       no-current
+       (let* ((fptr (if (fs:null-block? (full tble))
+                        (part tble)
+                        (full tble)))
+              (bffr (node:read scma fptr))
+              (curr (find-occupied-slot bffr -1)))
+         (buffer! tble bffr)
+         (slot!   tble curr)
+         done)))
  
-  (define (set-current-to-next! tble)
+ (define (set-current-to-next! tble)
    (define scma (schema tble))
    (define bffr (buffer tble))
    (define curr (slot   tble))
@@ -368,16 +380,6 @@
                 (buffer! tble ())
                 (slot!   tble -1)
                 no-current)))))
-
-  (define (nr-blocks tble)
-    (set-current-to-first! tble)
-    (let loop
-      ((cnt 1)
-       (bffr (buffer tble)))
-      (if (fs:null-block? (node:next bffr))
-          cnt
-          (loop (+ 1 cnt) (node:read (schema tble) (node:next bffr))))))
-    
     
 
  
@@ -393,6 +395,6 @@
    (define curr (rcid:slot rcid))
    (if (or (null? bffr)
            (not (= (rcid:bptr rcid) (node:position bffr))))
-     (set! bffr (node:read (schema tble) (rcid:bptr rcid))))
+       (set! bffr (node:read (schema tble) (rcid:bptr rcid))))
    (buffer! tble bffr)
    (slot!   tble curr)))

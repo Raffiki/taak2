@@ -165,73 +165,70 @@
                                   (set! indx idx)
                                   #f)))
    (if (null? indx)        ; index on 'attr' found, or search the tuple file sequentially
-     (for-all-tuples tble (lambda (tple rcid)
-                            (if (eqls (list-ref tple attr) valu)
-                              (set! rslt (cons (tbl:peek tble) rslt)))))
-     (for-all-identical-keys indx eqls valu
-                             (lambda (rcid)
-                               (tbl:current! tble (cdr (btree:peek indx)))
-                               (set! rslt (cons (tbl:peek tble) rslt)))))
+       (for-all-tuples tble (lambda (tple rcid)
+                              (if (eqls (list-ref tple attr) valu)
+                                  (set! rslt (cons (tbl:peek tble) rslt)))))
+       (for-all-identical-keys indx eqls valu
+                               (lambda (rcid)
+                                 (tbl:current! tble (cdr (btree:peek indx)))
+                                 (set! rslt (cons (tbl:peek tble) rslt)))))
    rslt)
 
  (define (select*-from/inner-join db t1 a1 t2 a2)
    (define result ())
-   (define (foreach lst proc)
-     (let loop ((ls lst))
-       (unless (null? ls)
-       (proc (car ls))
-       (loop (cdr ls)))))
-   (define (merge-tpls tpl1 tpl2)
-     (append tpl1 tpl2))
-   (define (add-to-result tpl joins)
-     (foreach joins (lambda (tpl2) (set! result (cons (merge-tpls tpl tpl2) result)))))
-         
    (define scma (tbl:schema t1))
    (define type (scma:type scma a1))
    (define eqls (vector-ref equals type))
+   
+   (define (foreach lst proc)
+     (let loop ((ls lst))
+       (unless (null? ls)
+         (proc (car ls))
+         (loop (cdr ls)))))
+   
+   (define (merge-tpls tpl1 tpl2)
+     (append tpl1 tpl2))
+   
+   (define (add-to-result tpl joins)
+     (foreach joins (lambda (tpl2) (set! result (cons (merge-tpls tpl tpl2) result)))))
+        
    (define (inner dict)
      (let
-         ((has-next-t2 (tbl:for-each-of-n-next-nodes t2 1
-                                                     (lambda (tple rcid)
+         ((has-next-t2 (tbl:for-each-of-n-next-nodes t2 1 ; voor t2, laadt telkens slechts 1 node/block in geheugen
+                                                     (lambda (tple rcid) ; voor elke tuple, zoek 
                                                        (let ((value (dict:find dict (list-ref tple a2))))
-                                                         (if value
-                                                             (begin
-                                                               ;(display tple) (display value) (newline)
-                                                               (add-to-result tple value)
-                                                               )))))))
-       ;(display "next inner: ") (display has-next-t2)
-       (if has-next-t2 (inner dict))))
+                                                         (if value (add-to-result tple value)
+                                                             ))))))
+       (if has-next-t2 (inner dict)))) ; zolang er een volgend block voor t2 bestaat, doe inner loop
+   
    (define (outer)
      (let*
          ((dict (dict:new eqls (* (scma:capacity (tbl:schema t1)) *m*)))
-          (has-next-t1 (tbl:for-each-of-n-next-nodes t1 (- *m* 1)
-                                                     (lambda (tple rcid)
-                                                      ; (display "insert tuple in dict: ")(display tple)(display (list-ref tple a1))(newline) 
-                                                       (dict:insert! dict (list-ref tple a1) tple)))))
-       (newline)
-       
-       ;(display "dict: ") (display (dict:print dict))
-       (newline)
-            (tbl:set-current-to-first! t2)
+          (has-next-t1 (tbl:for-each-of-n-next-nodes t1 (- *m* 1) ; voor t1, laadt telkens slechts M-1 node/block in geheugen
+                                                     (lambda (tple rcid) ; voor elke tple, voeg toe in dictionary met 
+                                                       (dict:insert! dict (list-ref tple a1) tple))))) 
 
+       (tbl:set-current-to-first! t2) ; (her) initialiseer de current t2 voor elke outer loop
        (inner dict)
-       (if has-next-t1 (outer) 'done)))
+       
+       (if has-next-t1 (outer) 'done))) ; zolang er een volgend block voor t1 bestaat, doe outer loop
    (tbl:set-current-to-first! t1)
-   ;(display "start")
+   
    (outer)
+   
    result
    )
        
 
 
 
-  (define (for-all-identical-keys indx eqls valu proc)
+ (define (for-all-identical-keys indx eqls valu proc)
    (let loop
      ((cur? (eq? (btree:find! indx valu) done)))
      (if cur?
-       (loop (and (proc (cdr (btree:peek indx)))
-                  (eq? (btree:set-current-to-next! indx) done)
-                  (eqls (car (btree:peek indx)) valu))))))
+         (loop (and (proc (cdr (btree:peek indx)))
+                    (eq? (btree:set-current-to-next! indx) done)
+                    (eqls (car (btree:peek indx)) valu))))))
  
  (define (delete-from-indexes dbse tble eqls tple rcid)
    (for-all-indices

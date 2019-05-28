@@ -32,26 +32,25 @@
    (h hash-function)
    (e equality))
 
-(define (print dict)
+(define (print dict) ; hulpfunctie
   (display (storage dict)))
  
  (define (new ==? M)
-   (make (make-vector M ()) (lambda (x) x) ==?))
+   (make (make-vector M ()) (lambda (x) x) ==?)) ; beschouw de identity function als hashfunction
  
  (define (insert! table key val)
    (define vector (storage table))
    (define h (hash-function table))
    (define ==? (equality table))
-   (define home-address (h key))
-   (define assoc (make-assoc key val))
-   (vector-set! vector home-address (cons assoc (vector-ref vector home-address))))
+   (define home-address key) ; beschouw de key als het home-address
+   (vector-set! vector home-address (cons val (vector-ref vector home-address)))) ; ipv. te overschrijven, voeg de value toe aan de lijst
  
  (define (find table key)
    (define vector (storage table))
    (define h (hash-function table))
    (define ==? (equality table))
    (define home-address (h key))
-   (vector-ref vector home-address))
+   (vector-ref vector home-address)) ; geef de hele value lijst terug
  
  (define (delete! table key)
    (define vector (storage table))
