@@ -29,7 +29,7 @@
          (prefix (Taak2 table) tbl:)
          (prefix (Taak2 schema) scma:)
          (prefix (a-d db index b-tree b-tree) btree:)
-         (prefix (a-d dictionary unordered linear-rehashing) dict:)
+         (prefix (Taak2 external-chaining) dict:)
          (rnrs base)
          (rnrs control)
          (rnrs lists)
@@ -76,11 +76,7 @@
    (define disk (tbl:disk tbls))
    (define tble (tbl:new disk name scma))
    (define idty (gennum))
-   (display "tbls")
-   (display tbls)
-   (newline)
    (tbl:insert! tbls (list name idty))
-   (display "asdf")
    tble)
  
  (define (find-id-in-meta-table dbse tabl)
@@ -179,6 +175,17 @@
    rslt)
 
  (define (select*-from/inner-join db t1 a1 t2 a2)
+   (define result ())
+   (define (foreach lst proc)
+     (let loop ((ls lst))
+       (unless (null? ls)
+       (proc (car ls))
+       (loop (cdr ls)))))
+   (define (merge-tpls tpl1 tpl2)
+     (append tpl1 tpl2))
+   (define (add-to-result tpl joins)
+     (foreach joins (lambda (tpl2) (set! result (cons (merge-tpls tpl tpl2) result)))))
+         
    (define scma (tbl:schema t1))
    (define type (scma:type scma a1))
    (define eqls (vector-ref equals type))
@@ -188,26 +195,31 @@
                                                      (lambda (tple rcid)
                                                        (let ((value (dict:find dict (list-ref tple a2))))
                                                          (if value
-                                                             (begin (display tple) (display value) (newline))))))))
+                                                             (begin
+                                                               ;(display tple) (display value) (newline)
+                                                               (add-to-result tple value)
+                                                               )))))))
+       ;(display "next inner: ") (display has-next-t2)
        (if has-next-t2 (inner dict))))
    (define (outer)
      (let*
-         ((dict (dict:new eqls (* (scma:capacity (tbl:schema t1)) *m*) (lambda (x) x)))
+         ((dict (dict:new eqls (* (scma:capacity (tbl:schema t1)) *m*)))
           (has-next-t1 (tbl:for-each-of-n-next-nodes t1 (- *m* 1)
                                                      (lambda (tple rcid)
-                                                       (display "insert tuple in dict: ")(display tple)(display (list-ref tple a1))(newline) 
+                                                      ; (display "insert tuple in dict: ")(display tple)(display (list-ref tple a1))(newline) 
                                                        (dict:insert! dict (list-ref tple a1) tple)))))
        (newline)
        
-       (display "dict: ") (display (dict:print dict))
+       ;(display "dict: ") (display (dict:print dict))
        (newline)
-         
+            (tbl:set-current-to-first! t2)
+
        (inner dict)
        (if has-next-t1 (outer) 'done)))
    (tbl:set-current-to-first! t1)
-   (tbl:set-current-to-first! t2)
-   (display "start")
+   ;(display "start")
    (outer)
+   result
    )
        
 

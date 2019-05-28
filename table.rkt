@@ -87,7 +87,7 @@
       (let
           ((tuple (peek tble))
            (curr (slot tble)))
-        (display (length bffrs)) (display " : lengte buffer ")  (newline)
+       ; (display (length bffrs)) (display " : lengte buffer ")  (newline)
         
         (if (eq? tuple no-current) ; no-current is gedefinieerd in de (a-d file constants) library
               (not (or (null? (buffer tble)) (fs:null-block? (node:next (buffer tble)))))
@@ -106,9 +106,9 @@
                   ((fs:null-block? (node:next (buffer tble)))
                    (buffer! tble ())
                    (slot!   tble -1)
-                   (display "done")
+                   ;(display "done")
                    #f)
-                  (else #t))
+                  (else (set-current-to-next! tble) #t))
 
           ))))))
  
@@ -155,7 +155,6 @@
    (define scma (scma:new disk atts))
    (define hder (fs:new-block disk))
    (define tble (make name hder scma () -1))
-   (display scma)
    (full! tble fs:null-block)
    (last! tble fs:null-block)
    (part! tble fs:null-block)

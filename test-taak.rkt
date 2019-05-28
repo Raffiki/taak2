@@ -125,13 +125,6 @@
 ;                              (display tuple)
 ;                              (newline)))
 
-(define (sum a b)
-  (if (= 0 b) a
-      (sum (+ 1 a) (- b 1))))
-(newline)
-(display "som: ") (display (sum 3 5))
-(newline)
-
 (tbl:set-current-to-first! zonnestelsel-planeten-table)
 (define (loop)
   (define has-next (tbl:for-each-of-n-next-nodes zonnestelsel-planeten-table 3 (lambda (tuple rcid)
@@ -142,7 +135,23 @@
 ;(loop)
 
 
-(db:select*-from/inner-join zonnestelsel zonnestelsel-planeten-table 5 ontdekker-table 0)
+(define results (db:select*-from/inner-join zonnestelsel zonnestelsel-planeten-table 5 ontdekker-table 0))
 
+(newline)
+(display "result:")
+(newline)
 
+(let loop ((res results))
+  (unless (null? res)
+    (display (car res)) (newline)
+    (loop (cdr res))))
 
+;(tbl:set-current-to-first! zonnestelsel-planeten-table)
+;(tbl:for-each-of-n-next-nodes zonnestelsel-planeten-table 3 (lambda (tuple rcid)
+;                                                                               (display tuple)
+;                                                                               (newline)))
+
+;(newline)(newline)
+;(tbl:for-each-of-n-next-nodes zonnestelsel-planeten-table 3 (lambda (tuple rcid)
+;                                                                               (display tuple)
+;                                                                               (newline)))
